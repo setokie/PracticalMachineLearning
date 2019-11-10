@@ -1,0 +1,127 @@
+---
+title: "Practical Machine Learning"
+author: "Nur Seto Dimas"
+date: "9 November 2019"
+output: 
+  html_document: 
+    highlight: haddock
+---
+
+# **Executive Summary**  
+Prediction models build from the [Weight Lifting Exercises Dataset](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har) study to predict exercises classification. Key insights includes:  
+
+* Out of 160 variables from data, 54 selected to build models prediction. 
+* Random forest with 54 variables give 99.76% accuracy, able to 100% correctly classifying 20 out of 20 test cases.
+
+# **Overview**  
+
+> Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).  
+
+# **Data Preparation**  
+
+```{r Libraries, message=FALSE, warning=FALSE}
+library(caret)
+library(rpart)
+library(randomForest)
+library(rattle)
+library(gbm)
+```
+
+Load training and testing data from given URL
+```{r Load data, message=FALSE, warning=FALSE}
+training_data <- read.csv("./data/pml-training.csv", header=TRUE)
+
+validation_data <- read.csv("./data/pml-testing.csv", header = TRUE)
+```
+
+Split training_data into training and testing data then use testing in cross validation.
+```{r Split data, message=FALSE, warning=FALSE}
+set.seed(2019)
+
+inTrain <- createDataPartition(training_data$classe, p = .7, list = FALSE)
+training <- training_data[inTrain, ]
+testing <- training_data[-inTrain, ]
+```
+
+
+Removing near zero variance predictors
+```{r NZV, echo=TRUE, message=FALSE, warning=FALSE}
+NZV <- nearZeroVar(training)
+training <- training[ , -NZV]
+testing <- testing[ , -NZV]
+```
+
+Removing predictors that contains mostly NA values
+```{r remove NA, message=FALSE, warning=FALSE}
+NA_variables <- sapply(training, function(x) mean(is.na(x))) > .9
+training <- training[ , NA_variables==FALSE]
+testing <- testing[ , NA_variables==FALSE]
+```
+
+Removing identification predictors
+```{r Identificator remove, message=FALSE, warning=FALSE}
+training <- training[ , -(1:5)]
+testing <- testing[ , -(1:5)]
+```
+
+# **Model Building**  
+Three method will be applied to create prediction model from training data set and the most accurate model will be used to predict the quiz questions. 
+
+
+**a. Decision Trees**  
+
+```{r Decision Tree, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+set.seed(2019)
+fit_decisionTree <- rpart(classe ~ ., data = training, method = "class")
+fancyRpartPlot(fit_decisionTree)
+```
+
+Validating model
+```{r Decision Tree Validation, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+pred_decisionTree <- predict(fit_decisionTree, testing, type = "class")
+confmatx_decisionTree <- confusionMatrix(pred_decisionTree, testing$classe)
+confmatx_decisionTree$overall[1]
+confmatx_decisionTree$table
+```
+
+**b. Random Forest**  
+
+```{r Random Forest, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+set.seed(2019)
+fit_RndForest <- randomForest(classe ~ ., data = training)
+fit_RndForest
+```
+
+Validating model
+```{r RF Validation, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+pred_RndForest <- predict(fit_RndForest, testing, type = "class")
+confmatx_RndForest <- confusionMatrix(pred_RndForest, testing$classe)
+confmatx_RndForest$overall[1]
+confmatx_RndForest$table
+```
+
+**c. Gradient Boosting Model**  
+
+```{r GBM, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+set.seed(2019)
+fitControl <- trainControl(method = "cv", number = 5)
+fit_GBM <- train(classe ~ ., data = training, method = "gbm", verbose = FALSE,
+                 trControl = fitControl)
+fit_GBM
+```
+
+Validating model
+```{r GBM Validation, echo=TRUE, message=FALSE, warning=FALSE}
+pred_GBM <- predict(fit_GBM, testing)
+confmatx_GBM <- confusionMatrix(pred_GBM, testing$classe)
+confmatx_GBM$overall[1]
+confmatx_GBM$table
+```
+
+# **Prediction**  
+For cases prediction, Random Forest will be used for its highest accuracy among other models.
+```{r Prediction, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+pred_Test <- predict(fit_RndForest, newdata = validation_data)
+pred_Test
+```
+
